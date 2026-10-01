@@ -16,6 +16,8 @@ export const compositionPayloadSchema = z.object({
   randomVersion: z.number().int().positive(),
   parameters: z.record(z.string(), z.unknown()),
   artboard: z.object({ width: z.number().positive(), height: z.number().positive() }),
+  /** Immutable input resources by role, e.g. { palette: id }. Absent in M1 saves. */
+  inputs: z.record(z.string(), z.string()).default({}),
   parentId: z.string().optional(),
   svgBlobId: z.string().min(1),
   thumbnailBlobId: z.string().min(1),

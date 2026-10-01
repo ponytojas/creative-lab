@@ -2,13 +2,16 @@
 
 Local-first creative coding laboratory. See [PLAN.md](PLAN.md) for the product plan.
 
-Current state: **M1 — keep what you find.** Atelier Infinito with the Radial Fields engine
-(seed, controls, auto mode, SVG download), plus local saving:
+Current state: **M2 — Visual DNA.** Two experiments:
 
-- **Save** (button or Cmd/Ctrl+S) stores the recipe, a self-contained SVG snapshot and a
-  thumbnail in IndexedDB. **Saved** lists them; open one as a working copy, rename, delete.
-- Working state is autosaved as a draft; after a reload you are offered to restore it.
-- A second tab is read-only while the first one is open.
+- **Atelier Infinito** — the Radial Fields engine: seed, controls, auto mode, palette picker,
+  SVG download. **Save** (button or Cmd/Ctrl+S) stores the recipe, a self-contained SVG
+  snapshot and a thumbnail; **Saved** lists them (open as working copy, rename, delete). The
+  working state is autosaved as a draft and offered for recovery after a reload. A second
+  tab is read-only.
+- **Visual DNA** — import a JPEG, PNG or WebP (picker, drag & drop or paste; ≤ 25 MiB,
+  ≤ 32 MP). It extracts 2–8 colors with proportions and a 3×3 color grid, all locally.
+  **Use in Atelier** stores the palette and selects it there.
 
 Everything lives in this browser's storage for this origin only. Clearing site data deletes
 it; backup/restore arrives in M5.

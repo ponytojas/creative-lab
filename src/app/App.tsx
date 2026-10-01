@@ -10,6 +10,19 @@ export function App({ persistence }: { persistence: Persistence }) {
   const [view, setView] = useState<View>({ name: 'workspace', experimentId: experiments[0].id })
   const active = view.name === 'workspace' ? experiments.find((e) => e.id === view.experimentId) : undefined
   const current = (name: View['name']) => (view.name === name ? 'page' : undefined)
+  const [message, setMessage] = useState<string>()
+
+  // Shell-mediated handoff: experiments never import each other.
+  const handOffPalette = async (paletteId: string) => {
+    const target = experiments.find((e) => e.acceptPalette)
+    const result = await target?.acceptPalette?.(paletteId)
+    if (target && result?.ok) {
+      setMessage(undefined)
+      setView({ name: 'workspace', experimentId: target.id })
+    } else {
+      setMessage(result && !result.ok ? result.reason : 'No experiment can use palettes.')
+    }
+  }
 
   return (
     <div className="app">
@@ -33,9 +46,11 @@ export function App({ persistence }: { persistence: Persistence }) {
         </p>
       )}
 
+      {message && <p className="notice error" role="alert">{message}</p>}
+
       <main className="main">
         {active ? (
-          <active.Workspace />
+          <active.Workspace key={active.id} onUsePalette={handOffPalette} />
         ) : view.name === 'saved' ? (
           <SavedView persistence={persistence}
             onOpened={(experimentId) => setView({ name: 'workspace', experimentId })} />

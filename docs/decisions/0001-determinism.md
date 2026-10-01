@@ -28,3 +28,15 @@ artboard) produces a byte-identical SVG on the same browser. Verified with golde
   may differ in the last bits.
 - Engines must draw random numbers in a stable order. Radial Fields draws the same
   values regardless of jitter so the jitter slider morphs smoothly.
+
+## Addendum (M2): image analysis
+
+- Visual DNA analysis (`ANALYSIS_VERSION` 1) is deterministic for the same normalized
+  pixels: stride sampling, seeded weighted k-means++ in OKLab, fixed tie-breaking and output
+  order. A pinned inline snapshot guards it; changing results means bumping the version.
+- Browser decoding and resizing may differ, so extracted palettes and color grids are
+  persisted as immutable resources when handed to Atelier. Reopening a composition uses the
+  stored palette; it never re-analyzes the image.
+- Saved compositions record their inputs (`payload.inputs.palette`, mirrored in
+  `provenance.inputResourceIds`). An image cannot be deleted while a saved composition uses
+  a palette derived from it.

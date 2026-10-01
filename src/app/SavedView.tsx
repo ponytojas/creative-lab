@@ -1,9 +1,10 @@
-import { liveQuery } from 'dexie'
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import type { Persistence } from '../core/persistence'
-import { deleteComposition, getBlob, listCompositions, renameComposition } from '../core/persistence/compositions'
+import { deleteComposition, listCompositions, renameComposition } from '../core/persistence/compositions'
 import type { CreativeLabDb } from '../core/persistence/db'
 import type { Composition } from '../core/resources/composition'
+import { useBlobUrl } from '../components/useBlobUrl'
+import { useLiveQuery } from '../components/useLiveQuery'
 import { experiments } from './registry'
 
 interface Props {
@@ -19,7 +20,7 @@ export function SavedView({ persistence, onOpened }: Props) {
 }
 
 function SavedGrid({ db, readOnly, onOpened }: { db: CreativeLabDb; readOnly: boolean; onOpened: Props['onOpened'] }) {
-  const compositions = useCompositions(db)
+  const compositions = useLiveQuery(() => listCompositions(db), db)
   const [message, setMessage] = useState<string>()
   const [renaming, setRenaming] = useState<string>()
 
@@ -28,11 +29,11 @@ function SavedGrid({ db, readOnly, onOpened }: { db: CreativeLabDb; readOnly: bo
     return <p className="empty">Nothing saved yet. Press Save (or Cmd/Ctrl+S) in a workspace to keep a composition.</p>
   }
 
-  const open = (c: Composition) => {
+  const open = async (c: Composition) => {
     const experiment = experiments.find((e) => e.id === c.payload.experimentId)
-    if (!experiment) return setMessage(`“${c.metadata.name}” belongs to an experiment that isn't available.`)
+    if (!experiment?.open) return setMessage(`“${c.metadata.name}” belongs to an experiment that isn't available.`)
     if (experiment.hasUnsavedWork() && !confirm(`Replace your unsaved work with “${c.metadata.name}”?`)) return
-    const result = experiment.open(c)
+    const result = await experiment.open(c)
     if (result.ok) onOpened(experiment.id)
     else setMessage(`Can't open “${c.metadata.name}”: ${result.reason}`)
   }
@@ -81,33 +82,7 @@ function SavedGrid({ db, readOnly, onOpened }: { db: CreativeLabDb; readOnly: bo
   )
 }
 
-/** Live list: updates when compositions change in this tab or another. */
-function useCompositions(db: CreativeLabDb): Composition[] | undefined {
-  const [compositions, setCompositions] = useState<Composition[]>()
-  useEffect(() => {
-    const subscription = liveQuery(() => listCompositions(db)).subscribe({
-      next: setCompositions,
-      error: (e) => console.error('Saved list failed', e),
-    })
-    return () => subscription.unsubscribe()
-  }, [db])
-  return compositions
-}
-
 function Thumbnail({ db, blobId, alt }: { db: CreativeLabDb; blobId: string; alt: string }) {
-  const [url, setUrl] = useState<string>()
-  useEffect(() => {
-    let objectUrl: string | undefined
-    let active = true
-    void getBlob(db, blobId).then((blob) => {
-      if (!blob || !active) return
-      objectUrl = URL.createObjectURL(blob)
-      setUrl(objectUrl)
-    })
-    return () => {
-      active = false
-      if (objectUrl) URL.revokeObjectURL(objectUrl)
-    }
-  }, [db, blobId])
+  const url = useBlobUrl(db, blobId)
   return url ? <img className="thumb" src={url} alt={alt} /> : <div className="thumb" aria-hidden />
 }

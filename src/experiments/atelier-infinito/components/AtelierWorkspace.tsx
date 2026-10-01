@@ -1,12 +1,17 @@
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { ParameterControls } from '../../../components/ParameterControls'
+import { useLiveQuery } from '../../../components/useLiveQuery'
+import { oklabToHex } from '../../../core/color/oklab'
+import type { CreativeLabDb } from '../../../core/persistence/db'
+import { listPalettes } from '../../../core/persistence/library'
+import type { Palette } from '../../../core/resources/palette'
 import type { ParameterSpecs } from '../../../core/parameters'
 import { wander, wanderCurves } from '../../../core/parameters/wander'
 import { createRng, isSeed, MAX_SEED } from '../../../core/random'
 import { radialFields } from '../engines/radialFields'
 import { renderRadialFields } from '../render'
 import {
-  dismissDraft, restoreDraft, saveCurrent, setParam as setSessionParam, setParams, setSeed, useAtelier,
+  dismissDraft, restoreDraft, saveCurrent, setPalette, setParam as setSessionParam, setParams, setSeed, useAtelier,
   type DraftStatus, type Session,
 } from '../session'
 
@@ -52,14 +57,16 @@ function compositionText(session: Session, save: SaveState): string {
 export function AtelierWorkspace() {
   const session = useAtelier((s) => s.session)
   const mode = useAtelier((s) => s.persistence.mode)
+  const db = useAtelier((s) => s.persistence.db)
+  const palette = useAtelier((s) => s.palette)
   const draftStatus = useAtelier((s) => s.draftStatus)
   const pendingDraft = useAtelier((s) => s.pendingDraft)
   const { seed, params } = session
   const readOnly = mode === 'readonly'
 
   // Deferred so controls stay responsive; the last rendered artwork stays visible meanwhile.
-  const recipe = useDeferredValue(useMemo(() => ({ seed, params }), [seed, params]))
-  const svg = useMemo(() => renderRadialFields(recipe.seed, recipe.params), [recipe])
+  const recipe = useDeferredValue(useMemo(() => ({ seed, params, palette }), [seed, params, palette]))
+  const svg = useMemo(() => renderRadialFields(recipe.seed, recipe.params, recipe.palette), [recipe])
 
   const [auto, setAuto] = useState(false)
   const [speed, setSpeed] = useState<number>(autoSpecs.speed.default)
@@ -137,6 +144,7 @@ export function AtelierWorkspace() {
 
         <fieldset className="editor" disabled={readOnly}>
         <SeedField seed={seed} onChange={setSeed} />
+        <PalettePicker db={db} paletteId={session.paletteId} palette={palette} />
 
         <ParameterControls specs={engine.parameters} keys={engine.primary} values={params} onChange={setParam} />
 
@@ -173,6 +181,30 @@ export function AtelierWorkspace() {
           </button>
         </div>
       </aside>
+    </div>
+  )
+}
+
+function PalettePicker({ db, paletteId, palette }: { db?: CreativeLabDb; paletteId?: string; palette: Palette }) {
+  const palettes = useLiveQuery(() => (db ? listPalettes(db) : Promise.resolve([])), db)
+  const [error, setError] = useState<string>()
+  return (
+    <div className="control">
+      <label htmlFor="palette">Palette</label>
+      <select id="palette" value={paletteId ?? ''}
+        onChange={async (e) => {
+          const result = await setPalette(e.target.value || undefined)
+          setError(result.ok ? undefined : result.reason)
+        }}>
+        <option value="">Built-in</option>
+        {palettes?.map((p) => <option key={p.id} value={p.id}>{p.metadata.name}</option>)}
+      </select>
+      <div className="palette-bar" aria-hidden>
+        {palette.swatches.map((s) => (
+          <span key={s.swatchId} style={{ flexGrow: s.weight, background: oklabToHex(s.color) }} />
+        ))}
+      </div>
+      {error && <p className="error" role="alert">{error}</p>}
     </div>
   )
 }

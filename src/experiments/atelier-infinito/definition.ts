@@ -1,5 +1,5 @@
 import { AtelierWorkspace } from './components/AtelierWorkspace'
-import { EXPERIMENT_ID, hasUnsavedWork, initAtelier, openComposition } from './session'
+import { EXPERIMENT_ID, hasUnsavedWork, initAtelier, openComposition, setPalette } from './session'
 
 export const atelierInfinito = {
   id: EXPERIMENT_ID,
@@ -9,4 +9,5 @@ export const atelierInfinito = {
   init: initAtelier,
   open: openComposition,
   hasUnsavedWork,
+  acceptPalette: (paletteId: string) => setPalette(paletteId),
 }

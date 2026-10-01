@@ -5,9 +5,12 @@ import { defaults, schema } from '../../core/parameters'
 import type { Persistence } from '../../core/persistence'
 import { saveComposition } from '../../core/persistence/compositions'
 import { deleteDraft, readDraft, writeDraft } from '../../core/persistence/drafts'
+import { getResource } from '../../core/persistence/resources'
 import { MAX_SEED, RANDOM_VERSION } from '../../core/random'
 import type { Composition } from '../../core/resources/composition'
+import { paletteSchema, type Palette } from '../../core/resources/palette'
 import { radialFields as engine } from './engines/radialFields'
+import { DEFAULT_PALETTE } from './palette'
 import { ARTBOARD, DEFAULT_SEED, renderRadialFields, type RadialFieldsParameters } from './render'
 
 export const EXPERIMENT_ID = 'atelier-infinito'
@@ -22,6 +25,8 @@ export interface Session {
   params: RadialFieldsParameters
   /** Composition this work was opened from or last saved as; parent of the next save. */
   basedOn?: string
+  /** Palette resource used as input; undefined = built-in palette. */
+  paletteId?: string
   /** Changed since it was opened or last saved. */
   dirty: boolean
 }
@@ -31,6 +36,7 @@ const sessionSchema = z.object({
   seed: z.number().int().min(0).max(MAX_SEED),
   params: schema(engine.parameters),
   basedOn: z.string().optional(),
+  paletteId: z.string().optional(),
   dirty: z.boolean(),
 })
 
@@ -38,6 +44,8 @@ export type DraftStatus = 'saved' | 'pending' | 'error' | 'off'
 
 interface AtelierState {
   session: Session
+  /** `session.paletteId` resolved; always set together with it. */
+  palette: Palette
   persistence: Persistence
   /** A previous session offered for recovery on launch. Draft writes pause while it is pending. */
   pendingDraft?: Session
@@ -53,6 +61,7 @@ const freshSession = (revision: number): Session => ({
 
 export const useAtelier = create<AtelierState>(() => ({
   session: freshSession(1),
+  palette: DEFAULT_PALETTE,
   persistence: { mode: 'unavailable' },
   draftStatus: 'off',
 }))
@@ -61,8 +70,11 @@ const { getState, setState } = useAtelier
 
 // --- Editing -----------------------------------------------------------------
 
-function edit(change: Partial<Pick<Session, 'seed' | 'params'>>) {
-  setState(({ session }) => ({ session: { ...session, ...change, revision: session.revision + 1, dirty: true } }))
+function edit(change: Partial<Pick<Session, 'seed' | 'params' | 'paletteId'>>, palette?: Palette) {
+  setState(({ session, palette: current }) => ({
+    session: { ...session, ...change, revision: session.revision + 1, dirty: true },
+    palette: palette ?? current,
+  }))
 }
 
 export const setSeed = (seed: number) => edit({ seed })
@@ -70,8 +82,23 @@ export const setParams = (params: RadialFieldsParameters) => edit({ params })
 export const setParam = (key: string, value: unknown) =>
   edit({ params: { ...getState().session.params, [key]: value } })
 
-function replace(next: Omit<Session, 'revision'>) {
-  setState(({ session }) => ({ session: { ...next, revision: session.revision + 1 }, pendingDraft: undefined }))
+function replace(next: Omit<Session, 'revision'>, palette: Palette) {
+  setState(({ session }) => ({ session: { ...next, revision: session.revision + 1 }, palette, pendingDraft: undefined }))
+}
+
+/** Loads a palette resource; undefined id = built-in. */
+async function resolvePalette(id: string | undefined): Promise<Palette | undefined> {
+  if (id === undefined) return DEFAULT_PALETTE
+  const { db } = getState().persistence
+  return db && (await getResource(db, id, paletteSchema))?.payload
+}
+
+/** Switches the input palette (an edit). */
+export async function setPalette(id: string | undefined): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const palette = await resolvePalette(id)
+  if (!palette) return { ok: false, reason: 'That palette is no longer available.' }
+  edit({ paletteId: id }, palette)
+  return { ok: true }
 }
 
 // --- Launch and draft recovery ---------------------------------------------------
@@ -89,16 +116,23 @@ export async function initAtelier(persistence: Persistence): Promise<void> {
 
   if (persistence.mode === 'readonly') {
     // Show the editor tab's latest state; never write.
-    setState({ session: restored ? { ...restored, revision } : freshSession(revision) })
+    const palette = restored && (await resolvePalette(restored.paletteId))
+    setState(
+      restored && palette ? { session: { ...restored, revision }, palette } : { session: freshSession(revision) },
+    )
     return
   }
   setState({ session: freshSession(revision), pendingDraft: restored, draftStatus: 'saved' })
   startDraftWriter(persistence.db)
 }
 
-export function restoreDraft() {
+export async function restoreDraft() {
   const { pendingDraft } = getState()
-  if (pendingDraft) replace(pendingDraft)
+  if (!pendingDraft) return
+  const palette = await resolvePalette(pendingDraft.paletteId)
+  // A palette deleted since the draft was written falls back to the built-in one.
+  if (palette) replace(pendingDraft, palette)
+  else replace({ ...pendingDraft, paletteId: undefined, dirty: true }, DEFAULT_PALETTE)
 }
 
 /** Discards the offered draft. Anything edited meanwhile is written right after. */
@@ -152,13 +186,13 @@ export const hasUnsavedWork = () => getState().session.dirty
 
 /** Saves the current working state as a new composition. Resolves only after commit. */
 export async function saveCurrent(): Promise<Composition | 'unchanged'> {
-  const { session, persistence } = getState()
+  const { session, persistence, palette } = getState()
   if (persistence.mode !== 'editor') throw new Error('Saving is not available in this tab.')
   if (!session.dirty && session.basedOn) return 'unchanged'
 
   // Everything slow or fallible happens before the transaction.
   const params = schema(engine.parameters).parse(session.params)
-  const svg = renderRadialFields(session.seed, params)
+  const svg = renderRadialFields(session.seed, params, palette)
   const thumbnail = await rasterizeSvg(svg, THUMBNAIL_PX)
 
   const composition = await saveComposition(persistence.db, {
@@ -170,6 +204,7 @@ export async function saveCurrent(): Promise<Composition | 'unchanged'> {
       randomVersion: RANDOM_VERSION,
       parameters: params,
       artboard: ARTBOARD,
+      inputs: session.paletteId ? { palette: session.paletteId } : {},
       parentId: session.basedOn,
     },
     producerId: `${EXPERIMENT_ID}/${engine.id}`,
@@ -191,13 +226,15 @@ export async function saveCurrent(): Promise<Composition | 'unchanged'> {
 }
 
 /** Opens a saved composition as a working copy; the saved item never changes. */
-export function openComposition(composition: Composition): { ok: true } | { ok: false; reason: string } {
+export async function openComposition(composition: Composition): Promise<{ ok: true } | { ok: false; reason: string }> {
   const { payload } = composition
   if (payload.engineId !== engine.id || payload.engineVersion !== engine.version || payload.randomVersion !== RANDOM_VERSION) {
     return { ok: false, reason: `Made with ${payload.engineId} v${payload.engineVersion}, which this version can't edit.` }
   }
   const params = schema(engine.parameters).safeParse(payload.parameters)
   if (!params.success) return { ok: false, reason: 'Its parameters are invalid for this engine.' }
-  replace({ seed: payload.seed, params: params.data, basedOn: composition.id, dirty: false })
+  const palette = await resolvePalette(payload.inputs.palette)
+  if (!palette) return { ok: false, reason: 'Its palette is missing.' }
+  replace({ seed: payload.seed, params: params.data, paletteId: payload.inputs.palette, basedOn: composition.id, dirty: false }, palette)
   return { ok: true }
 }

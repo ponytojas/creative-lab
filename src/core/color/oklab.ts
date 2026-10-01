@@ -12,6 +12,12 @@ export interface Oklab {
 export type LinearRgb = [r: number, g: number, b: number]
 
 const toLinear = (c: number) => (c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4)
+/** sRGB 8-bit channel -> linear, precomputed for pixel loops. */
+export const SRGB8_TO_LINEAR: Float64Array = Float64Array.from({ length: 256 }, (_, i) => toLinear(i / 255))
+
+/** Relative luminance (Rec. 709 / WCAG coefficients) of a linear sRGB color. */
+export const relativeLuminance = ([r, g, b]: LinearRgb) => 0.2126 * r + 0.7152 * g + 0.0722 * b
+
 const toGamma = (c: number) => (c <= 0.0031308 ? 12.92 * c : 1.055 * c ** (1 / 2.4) - 0.055)
 const clamp01 = (c: number) => Math.min(1, Math.max(0, c))
 

@@ -1,6 +1,7 @@
 import { compositionSchema, type Composition, type CompositionPayload } from '../resources/composition'
 import { COMPOSITION_SCHEMA_VERSION } from '../resources/composition'
 import type { CreativeLabDb } from './db'
+import { listResources } from './resources'
 
 export interface SaveCompositionInput {
   /** Recipe without blob ids; those are assigned here. */
@@ -27,7 +28,11 @@ export async function saveComposition(db: CreativeLabDb, input: SaveCompositionI
       type: 'composition',
       schemaVersion: COMPOSITION_SCHEMA_VERSION,
       payload: { ...input.recipe, svgBlobId, thumbnailBlobId },
-      provenance: { producerId: input.producerId, producerVersion: input.recipe.engineVersion, inputResourceIds: [] },
+      provenance: {
+        producerId: input.producerId,
+        producerVersion: input.recipe.engineVersion,
+        inputResourceIds: Object.values(input.recipe.inputs),
+      },
       metadata: { name: `${input.namePrefix} #${count + 1}`, createdAt: new Date().toISOString() },
     }) satisfies Composition
     await db.blobs.bulkAdd([
@@ -40,16 +45,8 @@ export async function saveComposition(db: CreativeLabDb, input: SaveCompositionI
 }
 
 /** Valid compositions, newest first. Invalid rows are skipped with a warning. */
-export async function listCompositions(db: CreativeLabDb): Promise<Composition[]> {
-  const rows = await db.resources.where('type').equals('composition').toArray()
-  const valid: Composition[] = []
-  for (const row of rows) {
-    const parsed = compositionSchema.safeParse(row)
-    if (parsed.success) valid.push(parsed.data)
-    else console.warn(`Skipping invalid composition "${row.id}"`, parsed.error)
-  }
-  return valid.sort((a, b) => b.metadata.createdAt.localeCompare(a.metadata.createdAt))
-}
+export const listCompositions = (db: CreativeLabDb): Promise<Composition[]> =>
+  listResources(db, 'composition', compositionSchema)
 
 /** Metadata is the only mutable part of a resource. */
 export async function renameComposition(db: CreativeLabDb, id: string, name: string): Promise<void> {

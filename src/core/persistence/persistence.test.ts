@@ -19,7 +19,7 @@ afterEach(async () => {
 const input = (overrides: Partial<SaveCompositionInput['recipe']> = {}): SaveCompositionInput => ({
   recipe: {
     experimentId: 'atelier-infinito', engineId: 'radial-fields', engineVersion: '1', seed: 42, randomVersion: 1,
-    parameters: { ringCount: 12 }, artboard: { width: 1000, height: 1000 }, ...overrides,
+    parameters: { ringCount: 12 }, artboard: { width: 1000, height: 1000 }, inputs: {}, ...overrides,
   },
   producerId: 'atelier-infinito/radial-fields',
   namePrefix: 'Radial Fields',
