@@ -1,13 +1,10 @@
 import { oklabToHex } from '../../../core/color/oklab'
 import type { PathShape, Point } from '../../../core/export/svg'
 import type { ParameterSpecs } from '../../../core/parameters'
-import type { Rng } from '../../../core/random'
-import type { Swatch } from '../../../core/resources/palette'
+import { BACKGROUNDS, weightedPick } from './shared'
 import type { GenerativeEngine } from './types'
 
 const TAU = Math.PI * 2
-
-export const BACKGROUNDS = { light: '#f4f0e8', dark: '#141418' } as const
 
 const parameters = {
   ringCount: { kind: 'integer', label: 'Rings', default: 32, min: 4, max: 96, mutationScale: 6 },
@@ -20,16 +17,6 @@ const parameters = {
   strokeWidth: { kind: 'number', label: 'Stroke width', default: 2.5, min: 0.25, max: 16, step: 0.05, scale: 'log', mutationScale: 0.25 },
   background: { kind: 'enum', label: 'Background', default: 'light', options: ['light', 'dark'] },
 } as const satisfies ParameterSpecs
-
-function weightedPick(swatches: readonly Swatch[], rng: Rng): Swatch {
-  const total = swatches.reduce((sum, s) => sum + s.weight, 0)
-  let r = rng.next() * total
-  for (const swatch of swatches) {
-    r -= swatch.weight
-    if (r < 0) return swatch
-  }
-  return swatches[swatches.length - 1]
-}
 
 export const radialFields: GenerativeEngine<typeof parameters> = {
   id: 'radial-fields',

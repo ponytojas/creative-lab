@@ -1,9 +1,10 @@
 import { describe, expect, it } from 'vitest'
 import { defaults, schema } from '../../../core/parameters'
-import { DEFAULT_SEED, renderRadialFields } from '../render'
+import { DEFAULT_SEED, getEngine, renderComposition } from '../render'
 import { radialFields } from './radialFields'
 
 const params = defaults(radialFields.parameters)
+const renderRadialFields = (seed: number, p: typeof params) => renderComposition(getEngine('radial-fields')!, seed, p)
 
 describe('Radial Fields v1', () => {
   // Golden file: an intentional change to the engine, palette, PRNG or serializer

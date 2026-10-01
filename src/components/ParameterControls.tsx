@@ -8,13 +8,17 @@ interface Props<S extends ParameterSpecs> {
   keys: ReadonlyArray<keyof S & string>
   values: Record<keyof S, Value>
   onChange: (key: keyof S & string, value: Value) => void
+  /** Keys shown but not editable right now. */
+  disabled?: ReadonlySet<string>
 }
 
-export function ParameterControls<S extends ParameterSpecs>({ specs, keys, values, onChange }: Props<S>) {
+export function ParameterControls<S extends ParameterSpecs>({ specs, keys, values, onChange, disabled }: Props<S>) {
   return (
     <div className="controls">
       {keys.map((key) => (
-        <Control key={key} spec={specs[key]} value={values[key]} onChange={(v) => onChange(key, v)} />
+        <fieldset key={key} className="control-wrap" disabled={disabled?.has(key)}>
+          <Control spec={specs[key]} value={values[key]} onChange={(v) => onChange(key, v)} />
+        </fieldset>
       ))}
     </div>
   )

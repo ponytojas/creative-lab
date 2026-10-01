@@ -40,3 +40,19 @@ artboard) produces a byte-identical SVG on the same browser. Verified with golde
 - Saved compositions record their inputs (`payload.inputs.palette`, mirrored in
   `provenance.inputResourceIds`). An image cannot be deleted while a saved composition uses
   a palette derived from it.
+
+## Addendum (M3): noise, Flow Field and spatial placement
+
+- **Noise (`NOISE_VERSION` 1, `core/random/noise.ts`):** in-repo seeded 2D Perlin gradient
+  noise plus fbm, pinned by reference values. No dependency can change it.
+- **Flow Field v1:** seeds from the `placement` stream, noise permutation from `geometry`,
+  colors from `color`; forward Euler with a fixed step; lines stop at the artboard edge or
+  after `lineLength` steps; generation stops when the vertex budget (60 000) is spent.
+- **Spatial placement v1:** cell luminance normalized to the image's own range, bilinear
+  between cell centers, image stretched to the artboard; rejection sampling (≤ 24 attempts,
+  then the last uniform candidate). Influence 0, no map or a flat map draw exactly the same
+  random numbers as uniform placement: identical output, tested.
+- **Inputs:** a composition records `inputs.palette` and, for engines that read it,
+  `inputs.spatial`. Reopening uses those exact resources.
+- **Drafts:** working state holds parameters per engine. Older single-engine drafts are
+  migrated on read (validation-time migration; it never changes how a recipe renders).

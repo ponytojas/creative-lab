@@ -20,7 +20,9 @@ test('import → analyze → reload restores the image and its palette', async (
   await openVisualDna(page)
   await importFixture(page)
   await expect(swatches(page)).toHaveText([/#ff0000\s*50\.0%/, /#ffff00\s*25\.0%/, /#0000ff\s*25\.0%/])
-  await expect(page.getByRole('region', { name: 'Color grid' }).getByText('Brightest')).toBeVisible()
+  const grid = page.getByRole('region', { name: 'Color grid' })
+  await expect(grid.getByLabel('Brightest')).toHaveCount(1)
+  await expect(grid.getByLabel('Darkest')).toHaveCount(1)
 
   await page.reload()
   await page.getByRole('button', { name: 'Explore' }).click()

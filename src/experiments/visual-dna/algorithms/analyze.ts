@@ -32,8 +32,8 @@ export const DEFAULT_ANALYSIS: AnalysisConfig = {
   maxSamples: 20_000,
   maxIterations: 30,
   tolerance: 1e-4,
-  gridWidth: 3,
-  gridHeight: 3,
+  gridWidth: 8,
+  gridHeight: 8,
 }
 
 export interface Pixels {

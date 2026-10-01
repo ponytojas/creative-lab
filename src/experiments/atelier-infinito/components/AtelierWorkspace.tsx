@@ -8,17 +8,14 @@ import type { Palette } from '../../../core/resources/palette'
 import type { ParameterSpecs } from '../../../core/parameters'
 import { wander, wanderCurves } from '../../../core/parameters/wander'
 import { createRng, isSeed, MAX_SEED } from '../../../core/random'
-import { radialFields } from '../engines/radialFields'
-import { renderRadialFields } from '../render'
+import { ENGINES, renderComposition, type AnyEngine } from '../render'
 import {
-  dismissDraft, restoreDraft, saveCurrent, setPalette, setParam as setSessionParam, setParams, setSeed, useAtelier,
-  type DraftStatus, type Session,
+  currentEngine, currentParams, dismissDraft, restoreDraft, saveCurrent, setEngine, setPalette,
+  setParam as setSessionParam, setParams, setSeed, useAtelier, type DraftStatus, type Session,
 } from '../session'
 
-const engine = radialFields
-const advanced = (Object.keys(engine.parameters) as (keyof typeof engine.parameters)[]).filter(
-  (key) => !engine.primary.includes(key),
-)
+const advancedKeys = (engine: AnyEngine) => Object.keys(engine.parameters).filter((k) => !engine.primary.includes(k))
+const SPATIAL_KEYS = new Set(['imageInfluence'])
 
 const autoSpecs = {
   speed: { kind: 'number', label: 'Speed', default: 1, min: 0.1, max: 10, step: 0.1, scale: 'log', mutationScale: 0 },
@@ -58,19 +55,25 @@ export function AtelierWorkspace() {
   const session = useAtelier((s) => s.session)
   const mode = useAtelier((s) => s.persistence.mode)
   const db = useAtelier((s) => s.persistence.db)
-  const palette = useAtelier((s) => s.palette)
+  const inputs = useAtelier((s) => s.inputs)
   const draftStatus = useAtelier((s) => s.draftStatus)
   const pendingDraft = useAtelier((s) => s.pendingDraft)
-  const { seed, params } = session
+  const { seed } = session
+  const engine = currentEngine(session)
+  const params = currentParams(session)
   const readOnly = mode === 'readonly'
+  const noMap = engine.usesSpatial && !inputs.spatial
 
   // Deferred so controls stay responsive; the last rendered artwork stays visible meanwhile.
-  const recipe = useDeferredValue(useMemo(() => ({ seed, params, palette }), [seed, params, palette]))
-  const svg = useMemo(() => renderRadialFields(recipe.seed, recipe.params, recipe.palette), [recipe])
+  const recipe = useDeferredValue(useMemo(() => ({ seed, engine, params, inputs }), [seed, engine, params, inputs]))
+  const svg = useMemo(
+    () => renderComposition(recipe.engine, recipe.seed, recipe.params, recipe.inputs),
+    [recipe],
+  )
 
   const [auto, setAuto] = useState(false)
   const [speed, setSpeed] = useState<number>(autoSpecs.speed.default)
-  const currentParams = useEffectEvent(() => params)
+  const paramsNow = useEffectEvent(() => ({ engine, params }))
   const currentSpeed = useEffectEvent(() => speed)
 
   // Touching a control takes over from auto mode instead of fighting it.
@@ -107,7 +110,7 @@ export function AtelierWorkspace() {
   // Auto mode: drift from the values at start. Stopping keeps the current frame.
   useEffect(() => {
     if (!auto) return
-    const start = currentParams()
+    const { engine, params: start } = paramsNow()
     const curves = wanderCurves(engine.parameters, createRng(randomSeed()))
     let t = 0
     let last = performance.now()
@@ -143,14 +146,24 @@ export function AtelierWorkspace() {
         </header>
 
         <fieldset className="editor" disabled={readOnly}>
+        <div className="control">
+          <label htmlFor="engine">Engine</label>
+          <select id="engine" value={engine.id} onChange={(e) => { setAuto(false); setEngine(e.target.value) }}>
+            {ENGINES.map((e) => <option key={e.id} value={e.id}>{e.name}</option>)}
+          </select>
+        </div>
         <SeedField seed={seed} onChange={setSeed} />
-        <PalettePicker db={db} paletteId={session.paletteId} palette={palette} />
+        <PalettePicker db={db} paletteId={session.paletteId} palette={inputs.palette} />
 
-        <ParameterControls specs={engine.parameters} keys={engine.primary} values={params} onChange={setParam} />
+        <ParameterControls specs={engine.parameters} keys={engine.primary} values={params} onChange={setParam}
+          disabled={noMap ? SPATIAL_KEYS : undefined} />
+        {noMap && (
+          <p className="muted small">Image influence needs a palette from Visual DNA: its color grid steers where lines start.</p>
+        )}
 
         <details>
           <summary>Advanced</summary>
-          <ParameterControls specs={engine.parameters} keys={advanced} values={params} onChange={setParam} />
+          <ParameterControls specs={engine.parameters} keys={advancedKeys(engine)} values={params} onChange={setParam} />
         </details>
 
         <div className="auto">

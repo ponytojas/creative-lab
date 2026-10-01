@@ -195,15 +195,20 @@ function GridView({ spatial, palette }: { spatial: SpatialColor; palette: Palett
           return (
             <div key={i} className="dna-cell" style={{ background: cell.color ? oklabToHex(cell.color) : 'transparent' }}
               title={cell.color ? `Average ${oklabToHex(cell.color)}${mark ? ` · ${mark}` : ''}` : 'No visible pixels'}>
-              {cell.dominantSwatchId && (
-                <span className="chip" style={{ background: swatchHex.get(cell.dominantSwatchId) }} aria-hidden />
+              {mark ? (
+                <span className="cell-mark" aria-label={mark}>{mark === 'Brightest' ? '☀' : '☾'}</span>
+              ) : (
+                cell.dominantSwatchId && (
+                  <span className="chip" style={{ background: swatchHex.get(cell.dominantSwatchId) }} aria-hidden />
+                )
               )}
-              {mark && <span className="cell-mark">{mark}</span>}
             </div>
           )
         })}
       </div>
-      <p className="muted small">Each cell: its average color; the dot is its most common palette color.</p>
+      <p className="muted small">
+        Each cell shows its average color; the dot is its most common palette color. ☀ brightest, ☾ darkest.
+      </p>
     </section>
   )
 }
