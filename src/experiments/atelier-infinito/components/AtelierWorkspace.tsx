@@ -1,7 +1,8 @@
-import { useDeferredValue, useMemo, useState } from 'react'
+import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { ParameterControls } from '../../../components/ParameterControls'
-import { defaults } from '../../../core/parameters'
-import { isSeed, MAX_SEED } from '../../../core/random'
+import { defaults, type ParameterSpecs } from '../../../core/parameters'
+import { wander, wanderCurves } from '../../../core/parameters/wander'
+import { createRng, isSeed, MAX_SEED } from '../../../core/random'
 import { radialFields } from '../engines/radialFields'
 import { DEFAULT_SEED, renderRadialFields, type RadialFieldsParameters } from '../render'
 
@@ -9,6 +10,10 @@ const engine = radialFields
 const advanced = (Object.keys(engine.parameters) as (keyof typeof engine.parameters)[]).filter(
   (key) => !engine.primary.includes(key),
 )
+
+const autoSpecs = {
+  speed: { kind: 'number', label: 'Speed', default: 1, min: 0.1, max: 10, step: 0.1, scale: 'log', mutationScale: 0 },
+} as const satisfies ParameterSpecs
 
 function randomSeed(): number {
   return crypto.getRandomValues(new Uint32Array(1))[0]
@@ -31,7 +36,32 @@ export function AtelierWorkspace() {
   const recipe = useDeferredValue(useMemo(() => ({ seed, params }), [seed, params]))
   const svg = useMemo(() => renderRadialFields(recipe.seed, recipe.params), [recipe])
 
-  const setParam = (key: string, value: unknown) => setParams((prev) => ({ ...prev, [key]: value }))
+  const [auto, setAuto] = useState(false)
+  const [speed, setSpeed] = useState<number>(autoSpecs.speed.default)
+  const currentParams = useEffectEvent(() => params)
+  const currentSpeed = useEffectEvent(() => speed)
+
+  // Touching a control takes over from auto mode instead of fighting it.
+  const setParam = (key: string, value: unknown) => {
+    setAuto(false)
+    setParams((prev) => ({ ...prev, [key]: value }))
+  }
+
+  // Auto mode: drift from the values at start. Stopping keeps the current frame.
+  useEffect(() => {
+    if (!auto) return
+    const start = currentParams()
+    const curves = wanderCurves(engine.parameters, createRng(randomSeed()))
+    let t = 0
+    let last = performance.now()
+    let frame = requestAnimationFrame(function tick(now) {
+      t += (Math.min(now - last, 100) / 1000) * currentSpeed() // clamp: no jump after a hidden tab
+      last = now
+      setParams(wander(engine.parameters, curves, start, t))
+      frame = requestAnimationFrame(tick)
+    })
+    return () => cancelAnimationFrame(frame)
+  }, [auto])
 
   return (
     <div className="workspace">
@@ -53,6 +83,14 @@ export function AtelierWorkspace() {
           <summary>Advanced</summary>
           <ParameterControls specs={engine.parameters} keys={advanced} values={params} onChange={setParam} />
         </details>
+
+        <div className="auto">
+          <button type="button" aria-pressed={auto} onClick={() => setAuto((a) => !a)}>
+            {auto ? 'Stop auto' : 'Auto'}
+          </button>
+          <ParameterControls specs={autoSpecs} keys={['speed']} values={{ speed }}
+            onChange={(_, v) => setSpeed(v as number)} />
+        </div>
 
         <button className="primary" type="button"
           onClick={() => download(svg, `${engine.id}-${recipe.seed}.svg`)}>

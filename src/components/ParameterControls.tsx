@@ -68,7 +68,7 @@ function Control({ spec, value, onChange }: { spec: ParameterSpec; value: Value;
           max={log ? Math.log(spec.max) : spec.max}
           step={log ? 'any' : step}
           sliderValue={log ? Math.log(v) : v}
-          numberValue={v}
+          numberValue={Number(v.toFixed(decimals))}
           numberStep={step} numberMin={spec.min} numberMax={spec.max}
           onSlider={(n) => set(log ? Math.exp(n) : n)}
           onNumber={set} />
