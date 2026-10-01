@@ -73,11 +73,12 @@ input[aria-invalid='true'] { border-color: var(--error); }
 .error { margin: 0; color: var(--error); font-size: 12px; }
 
 button { cursor: pointer; }
-.seed-row button, .primary {
+.seed-row button, .primary, .actions > button, .recovery button, .saved-actions button {
   background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 5px 10px;
 }
-.seed-row button:hover { border-color: var(--muted); }
-.primary { margin-top: auto; background: var(--accent); color: #1b1b1f; border-color: var(--accent); font-weight: 600; padding: 8px; }
+.seed-row button:hover, .actions > button:hover, .recovery button:hover, .saved-actions button:hover { border-color: var(--muted); }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+.actions > .primary { background: var(--accent); color: #1b1b1f; border-color: var(--accent); font-weight: 600; padding: 8px; }
 
 details summary { cursor: pointer; color: var(--muted); margin-bottom: 12px; }
 
@@ -87,3 +88,26 @@ details summary { cursor: pointer; color: var(--muted); margin-bottom: 12px; }
 }
 .auto > button:hover { border-color: var(--muted); }
 .auto > button[aria-pressed='true'] { border-color: var(--accent); color: var(--accent); }
+
+.editor { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 16px; }
+
+.actions { margin-top: auto; display: grid; gap: 8px; }
+.status { margin: 0; display: grid; gap: 2px; font-size: 12px; }
+.muted { color: var(--muted); }
+
+.recovery { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--accent); border-radius: 6px; }
+.recovery p { margin: 0; }
+.recovery-actions { display: flex; gap: 8px; }
+
+.notice { margin: 0; padding: 8px 16px; background: var(--surface); border-bottom: 1px solid var(--border); color: var(--accent); }
+.app:has(.notice) { grid-template-rows: auto auto 1fr; }
+
+.empty { padding: 32px; color: var(--muted); }
+.saved { padding: 32px; overflow-y: auto; height: 100%; }
+.saved-grid { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 16px; }
+.saved-item { display: grid; gap: 6px; padding: 12px; background: var(--surface); border: 1px solid var(--border); border-radius: 8px; }
+.saved-item time { color: var(--muted); font-size: 12px; }
+.saved-item input { background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 3px 6px; }
+.saved-name { overflow-wrap: anywhere; }
+.thumb { width: 100%; aspect-ratio: 1; display: block; border-radius: 4px; background: var(--bg); object-fit: contain; }
+.saved-actions { display: flex; gap: 6px; flex-wrap: wrap; }

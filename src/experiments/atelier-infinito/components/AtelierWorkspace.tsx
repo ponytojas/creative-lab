@@ -1,10 +1,14 @@
 import { useDeferredValue, useEffect, useEffectEvent, useMemo, useState } from 'react'
 import { ParameterControls } from '../../../components/ParameterControls'
-import { defaults, type ParameterSpecs } from '../../../core/parameters'
+import type { ParameterSpecs } from '../../../core/parameters'
 import { wander, wanderCurves } from '../../../core/parameters/wander'
 import { createRng, isSeed, MAX_SEED } from '../../../core/random'
 import { radialFields } from '../engines/radialFields'
-import { DEFAULT_SEED, renderRadialFields, type RadialFieldsParameters } from '../render'
+import { renderRadialFields } from '../render'
+import {
+  dismissDraft, restoreDraft, saveCurrent, setParam as setSessionParam, setParams, setSeed, useAtelier,
+  type DraftStatus, type Session,
+} from '../session'
 
 const engine = radialFields
 const advanced = (Object.keys(engine.parameters) as (keyof typeof engine.parameters)[]).filter(
@@ -28,9 +32,30 @@ function download(svg: string, filename: string) {
   URL.revokeObjectURL(url)
 }
 
+type SaveState = { kind: 'idle' } | { kind: 'saving' } | { kind: 'saved'; name: string } | { kind: 'error'; message: string }
+
+const DRAFT_TEXT: Record<DraftStatus, string> = {
+  saved: 'Autosaved locally',
+  pending: 'Autosaving…',
+  error: "Couldn't autosave locally",
+  off: '',
+}
+
+function compositionText(session: Session, save: SaveState): string {
+  if (save.kind === 'saving') return 'Saving…'
+  if (save.kind === 'error') return save.message
+  if (session.dirty) return session.basedOn ? 'Unsaved changes' : 'Not saved yet'
+  if (save.kind === 'saved') return `Saved as “${save.name}”`
+  return session.basedOn ? 'Saved' : 'Not saved yet'
+}
+
 export function AtelierWorkspace() {
-  const [seed, setSeed] = useState(DEFAULT_SEED)
-  const [params, setParams] = useState<RadialFieldsParameters>(() => defaults(engine.parameters))
+  const session = useAtelier((s) => s.session)
+  const mode = useAtelier((s) => s.persistence.mode)
+  const draftStatus = useAtelier((s) => s.draftStatus)
+  const pendingDraft = useAtelier((s) => s.pendingDraft)
+  const { seed, params } = session
+  const readOnly = mode === 'readonly'
 
   // Deferred so controls stay responsive; the last rendered artwork stays visible meanwhile.
   const recipe = useDeferredValue(useMemo(() => ({ seed, params }), [seed, params]))
@@ -44,8 +69,33 @@ export function AtelierWorkspace() {
   // Touching a control takes over from auto mode instead of fighting it.
   const setParam = (key: string, value: unknown) => {
     setAuto(false)
-    setParams((prev) => ({ ...prev, [key]: value }))
+    setSessionParam(key, value)
   }
+
+  const [saveState, setSaveState] = useState<SaveState>({ kind: 'idle' })
+  const save = async () => {
+    if (mode !== 'editor' || saveState.kind === 'saving') return
+    setSaveState({ kind: 'saving' })
+    try {
+      const result = await saveCurrent()
+      setSaveState(result === 'unchanged' ? { kind: 'idle' } : { kind: 'saved', name: result.metadata.name })
+    } catch (error) {
+      console.error('Save failed', error)
+      const reason = error instanceof Error && error.name === 'QuotaExceededError' ? 'storage is full' : 'an error occurred'
+      setSaveState({ kind: 'error', message: `Couldn't save (${reason}). Your artwork is still here; download the SVG to be safe.` })
+    }
+  }
+  const onSaveShortcut = useEffectEvent((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 's') {
+      e.preventDefault() // never the browser's "Save page" dialog
+      void save()
+    }
+  })
+  useEffect(() => {
+    const listener = (e: KeyboardEvent) => onSaveShortcut(e)
+    addEventListener('keydown', listener)
+    return () => removeEventListener('keydown', listener)
+  }, [])
 
   // Auto mode: drift from the values at start. Stopping keeps the current frame.
   useEffect(() => {
@@ -70,11 +120,22 @@ export function AtelierWorkspace() {
         dangerouslySetInnerHTML={{ __html: svg }} />
 
       <aside className="panel" aria-label="Controls">
+        {pendingDraft && (
+          <div className="recovery" role="region" aria-label="Session recovery">
+            <p>Restore your last session?</p>
+            <div className="recovery-actions">
+              <button type="button" onClick={restoreDraft}>Restore</button>
+              <button type="button" onClick={dismissDraft}>Dismiss</button>
+            </div>
+          </div>
+        )}
+
         <header>
           <h1>{engine.name}</h1>
           <p className="describe">{engine.describe}</p>
         </header>
 
+        <fieldset className="editor" disabled={readOnly}>
         <SeedField seed={seed} onChange={setSeed} />
 
         <ParameterControls specs={engine.parameters} keys={engine.primary} values={params} onChange={setParam} />
@@ -92,10 +153,25 @@ export function AtelierWorkspace() {
             onChange={(_, v) => setSpeed(v as number)} />
         </div>
 
-        <button className="primary" type="button"
-          onClick={() => download(svg, `${engine.id}-${recipe.seed}.svg`)}>
-          Download SVG
-        </button>
+        </fieldset>
+
+        <div className="actions">
+          {mode !== 'unavailable' && (
+            <p className="status" role="status">
+              <span>{compositionText(session, saveState)}</span>
+              {mode === 'editor' && (
+                <span className="muted">{pendingDraft ? 'Autosave paused until you choose above' : DRAFT_TEXT[draftStatus]}</span>
+              )}
+            </p>
+          )}
+          <button className="primary" type="button" onClick={save}
+            disabled={mode !== 'editor' || saveState.kind === 'saving'} aria-keyshortcuts="Meta+S Control+S">
+            Save
+          </button>
+          <button type="button" onClick={() => download(svg, `${engine.id}-${recipe.seed}.svg`)}>
+            Download SVG
+          </button>
+        </div>
       </aside>
     </div>
   )
